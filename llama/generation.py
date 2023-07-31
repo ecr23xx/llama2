@@ -112,10 +112,14 @@ class Llama:
         top_p: float = 0.9,
         logprobs: bool = False,
         echo: bool = False,
+        stream: bool = False,
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
         params = self.model.params
         bsz = len(prompt_tokens)
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
+
+        if stream:
+            assert bsz == 1
 
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
@@ -157,6 +161,8 @@ class Llama:
                 next_token == self.tokenizer.eos_id
             )
             prev_pos = cur_pos
+            if stream:
+                print(self.tokenizer.decode_one_word(next_token.item()), end='', flush=True)
             if all(eos_reached):
                 break
 
@@ -187,6 +193,7 @@ class Llama:
         max_gen_len: Optional[int] = None,
         logprobs: bool = False,
         echo: bool = False,
+        stream: bool = False,
     ) -> List[CompletionPrediction]:
         if max_gen_len is None:
             max_gen_len = self.model.params.max_seq_len - 1
@@ -198,6 +205,7 @@ class Llama:
             top_p=top_p,
             logprobs=logprobs,
             echo=echo,
+            stream=stream,
         )
         if logprobs:
             return [

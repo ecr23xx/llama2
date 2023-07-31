@@ -17,6 +17,7 @@ class Tokenizer:
         assert os.path.isfile(model_path), model_path
         self.sp_model = SentencePieceProcessor(model_file=model_path)
         logger.info(f"Reloaded SentencePiece model from {model_path}")
+        self.first_space = True
 
         # BOS / EOS token IDs
         self.n_words: int = self.sp_model.vocab_size()
@@ -39,3 +40,15 @@ class Tokenizer:
 
     def decode(self, t: List[int]) -> str:
         return self.sp_model.decode(t)
+
+    def decode_one_word(self, t : int) -> str:
+        res = self.sp_model.IdToPiece(t)
+        if self.first_space:
+            res = res.replace("▁", "")
+            self.first_space = False
+        else:
+            res = res.replace("▁", " ")
+        if "<0x0A>" in res:
+            res = res.replace("<0x0A>", "\n")
+            self.first_space = True
+        return res
