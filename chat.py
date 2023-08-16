@@ -5,6 +5,7 @@ import json
 import torch
 import argparse
 from pathlib import Path
+from contextlib import nullcontext
 
 from llama.model import Transformer, ModelArgs
 from llama.tokenizer import Tokenizer
@@ -13,13 +14,17 @@ from llama.tokenizer import Tokenizer
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--temperature", default=0.0, type=float)
-    parser.add_argument("--max-new-tokens", default=16, type=int)
+    parser.add_argument("--max-new-tokens", default=500, type=int)
     return parser.parse_args()
 
 
 def main():
     # seed must be the same in all processes
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16'
+    ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
+    ctx = nullcontext() if device == 'cpu' else torch.amp.autocast(device_type=device, dtype=ptdtype)
 
     args = parse_args()
     print(args)
@@ -41,17 +46,21 @@ def main():
     model_args.vocab_size = tokenizer.n_words
     print(model_args)
 
-    model = Transformer(model_args)
+    model = Transformer(model_args).half()
     model.load_state_dict(checkpoint, strict=False)
 
     model.eval()
-    # model.to(device)
+    model.to(device)
 
-    prompt = "Hello there"
+    prompt = "Here is an introduction to Albert Einstein: "
     start_ids = tokenizer.encode(prompt, bos=True, eos=False)
-    x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
-    idxs = model.generate(x, args.max_new_tokens, temperature=args.temperature)
-    print(idxs)
+    x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+
+    with torch.no_grad():
+        with ctx:
+            idxs = model.generate(x, args.max_new_tokens, temperature=args.temperature)
+            print(tokenizer.decode(idxs[0].tolist()))
+            # print(idxs)
 
 
 if __name__ == "__main__":
